@@ -1,7 +1,9 @@
 # imeonoff — Windows IME ON/OFF 制御ツール
 
 Rust 製の Windows IME（日本語入力）ON/OFF 制御ツールです。  
-**CrowdStrike Falcon** 環境でも削除されない方式（`SendInput` + `VK_CONVERT`/`VK_NONCONVERT`）を採用しています。
+Windows Defenderなどにも削除されない方式（`SendInput` + `VK_CONVERT`/`VK_NONCONVERT`）を採用しています。
+
+英字キーボードなどで、左右のAltでIMEを切り替えるAutoHotkey用のスクリプトも同梱しています。
 
 ## 使い方
 
@@ -12,6 +14,8 @@ imeonoff.exe Toggle   # IME をトグル切り替え
 imeonoff.exe Status   # IME 状態を終了コードで返す
 ```
 
+※　機能はこれだけです。入力モードを記憶する機能等は実装していません。長いこと文章書いたりプログラム書いたりしていますけど、入力モードを切り替えて使ったことはいままで数回しかないからです。
+
 ### Status の終了コード
 
 | 終了コード | 意味     |
@@ -20,16 +24,62 @@ imeonoff.exe Status   # IME 状態を終了コードで返す
 | 1         | IME OFF |
 | 2         | エラー   |
 
-### AHK からの使用例
+### AHK からの使用例（英字キーボード対応）
+同梱のスクリプトを見てください。
 
-```ahk
-IME_EXE := "C:\Users\yusakata\bin\imeonoff.exe"
+英字キーボード対応はAutoHotkey頼りです。もともと、AutoHotkey用に、AltIME.ahkとIMEv2.ahktというツールがあり、長らくそちらを使っていたのですが、ある日「AI時代だから、この機能、Rustで作れるのでは？」と思ってしまったのが始まりです。
 
-#UseHook
-#Space::      RunWait IME_EXE " Toggle", , "Hide"
-#F1::         RunWait IME_EXE " ON",     , "Hide"
-#F2::         RunWait IME_EXE " OFF",    , "Hide"
+IMEv2.ahkの代替として、imeonoff.exeができました。
+
+AltIME.ahkは大幅にリファクタリングしましたが、これで動くようです。
+
+### NeoVimからの使用例
+NeoVimでは、im-selectというツールが有名で、正直このツール不要かも？と思っています。まあ、向こうはIMEの状態記憶などもしてくれるという上位互換なので、使ってみたい方はそちらもどうぞ。
+
+NeoVimでは、以下のスクリプトでStatusを記憶させることで、インサートモードに戻ったときに、Statusを復元します。
+
+```lua
+-- グローバルスコープの記憶領域
+local ime_was_on = false 
+
+local function get_ime_status()
+    -- プロセスを実行（出力はどうでもいいので捨てる）
+    vim.fn.system("imeonoff.exe Status")
+    -- vim.v.shell_error には、直前に実行したプロセスの終了コードが入る
+    local exit_code = vim.v.shell_error
+    
+    -- 終了コードが 0 なら IMEはONだったと判定
+    if exit_code == 0 then
+        return true
+    else
+        return false
+    end
+end
+--- 3. インサートモードに入る時
+local insert_keys = {'i', 'a', 'o', 'I', 'A', 'O'}
+for _, key in ipairs(insert_keys) do
+    vim.keymap.set('n', key, function()
+        -- 記憶に基づいて必要な時だけONにする
+        if ime_was_on then
+            ime_on()
+        end
+        vim.api.nvim_feedkeys(key, 'n', true)
+    end)
+end
+
+-- 4. インサートモードから抜ける時
+vim.api.nvim_create_autocmd("InsertLeave", {
+    callback = function()
+        ime_was_on = get_ime_status()
+        os.execute("imeonoff.exe OFF")
+    end,
+})
+
 ```
+
+### Emacsでの使用例
+Emacsでは、このツールを使う必要がありません。
+tr-imeを使えば全部やってくれます。
 
 ## ビルド
 
