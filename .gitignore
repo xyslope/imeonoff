@@ -1,0 +1,4 @@
+/target
+*.exe
+*.exe.manifest
+.DS_Store
